@@ -15,6 +15,13 @@ class CSP:
         # the variable pair (i, j)
         self.constraints = {}
 
+        # self.iterationCounter tracks the amount of times the backtrack() function is called
+        self.iterationCounter = 0
+
+        # self.failureCounter tracks the amount of times the backtrack() function returns a failure
+        # (runs into a dead end)
+        self.failureCounter = 0
+
     def add_variable(self, name, domain):
         """Add a new variable to the CSP. 'name' is the variable name
         and 'domain' is a list of the legal values for the variable.
@@ -109,7 +116,9 @@ class CSP:
         assignments and inferences that took place in previous
         iterations of the loop.
         """
-        # TODO: IMPLEMENT THIS
+        self.iterationCounter += 1 # Tick the iteration counter
+
+        # Checks if the assignment is complete
         flag = True
         for variable in assignment:
             if len(assignment[variable]) != 1:
@@ -118,14 +127,20 @@ class CSP:
         if flag:
             return assignment
 
-        var = self.select_unassigned_variable(assignment)
-        for value in assignment[var]: # self.order_domain_values(assignment, var) to make use of the least-constraining-value heuristic
+        # Backtracking search algorithm
+        var = self.select_unassigned_variable(assignment)   # Chooses the variable with the minimum remaining values (MRV)
+
+        # for value in assignment[var]: just selects the first value in the list of domains.
+        # Use self.order_domain_values(assignment, var): instead to make use of the least-constraining-value heuristic.
+        # It is not used in this solution as it does not seem to work properly.
+        for value in assignment[var]:
             tempAssignment = copy.deepcopy(assignment)
             tempAssignment[var] = [value]
-            self.inference(tempAssignment, self.get_all_arcs())
-            result = self.backtrack(tempAssignment)
+            self.inference(tempAssignment, self.get_all_arcs())    # Runs the AC-3 Algorithm to propagate eventual changes.
+            result = self.backtrack(tempAssignment)     # Recursively backtracks the possible solution
             if not result == False:
                 return result
+        self.failureCounter += 1 # Tick the failure counter
         return False
 
 
@@ -137,6 +152,7 @@ class CSP:
         of legal values has a length greater than one.
         """
         mrv = []
+        # Find all variables with the minimum remaining values
         for variable in assignment:
             if len(assignment[variable]) != 1:
                 if len(mrv) == 0:
@@ -146,24 +162,39 @@ class CSP:
                 elif len(assignment[variable]) == len(assignment[mrv[0]]):
                     mrv.append(variable)
         if len(mrv) == 1:
-            return mrv[0]
+            return mrv[0]   # Chooses the mrv if there is only one
         else:
             maxDegree = mrv[0]
             for variable in mrv:
                 if len(self.constraints[variable]) > len(self.constraints[maxDegree]):
                     maxDegree = variable
-        return maxDegree
+        return maxDegree    # Chooses one of the mrv's with the highest degree/amount of constraints tied to it.
 
     def order_domain_values(self, assignment, var):
+        """
+        This function orders the domain values in a least-constraining-value priority, ensuring that the value that
+        interferes the least with other neighboring variables.
+        """
+        # The purpose of this function is to select the value that has the least impact on all other neighboring
+        # variables, i.e. the least constraining value. However, for the sudoku CSP it seems to actually increase the
+        # runtime / amount of iterations/failures. I am unsure why, perhaps it will only be effective on larger
+        # tasks, or I have implemented it poorly.
+        # Seeing as it is ineffective, I have chosen to not use it in my solution, but I would love to understand what
+        # I have done wrong.
         priority = {}
         list = []
+
+        # Counts the amount of times each value appears in all neighbouring variables and adds them to
+        # a priority dictionary.
         for value in assignment[var]:
             counter = 0
-            for i, neighbor in self.get_all_neighboring_arcs(var):
+            for neighbor, i in self.get_all_neighboring_arcs(var):
                 if value in assignment[neighbor]:
                     counter += 1
             priority[value] = counter
         size = len(priority)
+        # Creates a priority list with the value with the lowest appearance counts (having the least effect on all
+        # neighbouring variables) first.
         for elements in range(0, size):
             var = min(priority, key=priority.get)
             list.append(var)
@@ -177,13 +208,12 @@ class CSP:
         the lists of legal values for each undecided variable. 'queue'
         is the initial queue of arcs that should be visited.
         """
-        # TODO: IMPLEMENT THIS
         while len(queue) != 0:
             i, j = queue.pop(0)
-            if self.revise(assignment, i, j):
-                if len(self.domains[i]) == 0:
+            if self.revise(assignment, i, j): # Uses revise to change values
+                if len(assignment[i]) == 0: # If there are no more possible values return failure
                     return False
-                for i, neighbor in self.get_all_neighboring_arcs(i):
+                for i, neighbor in self.get_all_neighboring_arcs(i): # If changes have been made, add neighbouring arcs to queue to propagate
                     if neighbor != j:
                         queue.append((neighbor, i))
 
@@ -197,14 +227,13 @@ class CSP:
         between i and j, the value should be deleted from i's list of
         legal values in 'assignment'.
         """
-        # TODO: IMPLEMENT THIS
         revised = False
         for x in assignment[i]:
             success = False
             for y in assignment[j]:
-                if (x, y) in self.constraints[i][j]:
+                if (x, y) in self.constraints[i][j]: # If there exists an y that allows for a legal combination of (x, y) given the constraints
                     success = True
-            if not success:
+            if not success:     # If no such y was found, remove x from the legal values of i
                 assignment[i].remove(x)
                 revised = True
         return revised
